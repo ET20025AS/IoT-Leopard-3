@@ -1,7 +1,14 @@
-# packages:
+# required packages:
 opencv-python 
 numpy
 
-# installation:
+# package installation:
 pip install opencv-python
 pip install numpy
+
+# required models: 
+# available on: https://github.com/AlexeyAB/darknet/releases/tag/darknet_yolo_v3_optimal:
+yolov4.cfg
+yolov4.weights
+
+
