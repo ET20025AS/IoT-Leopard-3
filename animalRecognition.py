@@ -9,8 +9,8 @@ from flask import Flask, Response, render_template, jsonify, request
 
 # Laden des YOLOv4-Modells und seiner Gewichte
 #net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
-net = cv2.dnn.readNet("yolov7-tiny.weights", "yolov7-tiny.cfg")
-#net = cv2.dnn.readNet("yolov7.weights", "yolov7.cfg")
+#net = cv2.dnn.readNet("yolov7-tiny.weights", "yolov7-tiny.cfg")
+net = cv2.dnn.readNet("yolov7.weights", "yolov7.cfg")
 net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
 net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
 
@@ -145,11 +145,10 @@ def object_detection():
         # Convert the color format from RGB to BGR
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
-        # reducesize of image to increase performance
-        # new_height = int(img.shape[0] * 0.5)
-        # new_width = int(img.shape[1] * 0.5)
-        # dim = (new_width, new_height)
-        # img = cv2.resize(img, dim)
+        resize_scale = 0.5  # Adjust this value to change the image resolution
+        new_width = int(img.shape[1] * resize_scale)
+        new_height = int(img.shape[0] * resize_scale)
+        img = cv2.resize(img, (new_width, new_height))
 
         # Erstellen eines Blob-Objekts aus dem Eingabebild
         blob = cv2.dnn.blobFromImage(img, 1 / 255.0, (416, 416), swapRB=True, crop=False)
