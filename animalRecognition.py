@@ -157,14 +157,18 @@ def object_detection():
         # Markierung der erkannten Tiere
         colors = np.random.uniform(0, 255, size=(len(animal_boxes), 3))
         species_array = []
+        animalId = 0
+        
         if len(indices) > 0:
             for i in indices.flatten():
                 x, y, w, h = animal_boxes[i]
-                label = f"{animal_classes_detected[i]}: {animal_confidences[i]:.2f}"
+                label = f"{animal_classes_detected[i]} #id:{animalId}: {animal_confidences[i]:.2f}"
                 color = colors[i]
                 cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
                 cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                species_array.append({"Species": animal_classes_detected[i], "Position": [x, y, w, h]})
+                species_array.append({"Species": animal_classes_detected[i], "id": animalId, "Position": [x, y, w, h]})
+                animalId=animalId+1
+                
         # Ausgabe der erkannten Objekte
         print(species_array)
 
@@ -174,72 +178,6 @@ def object_detection():
             outputFrame = img.copy()
 
 
-<<<<<<< HEAD
-while True:
-    # Lesen des Kamerabildes
-    success, img = cap.read()
-
-    # Erstellen eines Blob-Objekts aus dem Eingabebild
-    blob = cv2.dnn.blobFromImage(img, 1/255.0, (416, 416), swapRB=True, crop=False)
-
-    # Setzen des Blob-Objekts als Eingabe für das Modell
-    net.setInput(blob)
-
-    # Durchführen der Vorwärtsdurchlauf-Operationen
-    layer_names = net.getLayerNames()
-    output_layers = [layer_names[i-1] for i in net.getUnconnectedOutLayers()]
-    outputs = net.forward(output_layers)
-
-    # Erkennung der Tiere
-    animal_boxes = []
-    animal_classes_detected = []
-    animal_confidences = []
-    for output in outputs:
-        for detection in output:
-            scores = detection[5:]
-            class_id = np.argmax(scores)
-            confidence = scores[class_id]
-            if class_id in animal_class_ids and confidence > conf_threshold:
-                center_x = int(detection[0] * img.shape[1])
-                center_y = int(detection[1] * img.shape[0])
-                width = int(detection[2] * img.shape[1])
-                height = int(detection[3] * img.shape[0])
-                left = int(center_x - width / 2)
-                top = int(center_y - height / 2)
-                animal_boxes.append([left, top, width, height])
-                animal_classes_detected.append(animal_classes[animal_class_ids.index(class_id)])
-                animal_confidences.append(float(confidence))
-
-    # Anwenden der Nicht-Maximum-Unterdrückung
-    indices = cv2.dnn.NMSBoxes(animal_boxes, animal_confidences, conf_threshold, nms_threshold)
-
-    # Markierung der erkannten Tiere
-    colors = np.random.uniform(0, 255, size=(len(animal_boxes), 3))
-    species_array = []
-    animalId = 0
-    
-    if len(indices) > 0:
-        for i in indices.flatten():
-            x, y, w, h = animal_boxes[i]
-            label = f"{animal_classes_detected[i]} #id:{animalId}: {animal_confidences[i]:.2f}"
-            color = colors[i]
-            cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
-            cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            species_array.append({"Species": animal_classes_detected[i], "id": animalId, "Position": [x, y, w, h]})
-            animalId=animalId+1
-
-    # Anzeigen des Bildes
-    print(species_array)
-    cv2.imshow("Animal Detection", img)
-    
-    # # Abbrechen bei Drücken der "q"-Taste
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Freigabe der Ressourcen
-cap.release()
-cv2.destroyAllWindows()
-=======
 if __name__ == '__main__':
     mqtt_connect()
     # start a thread that will perform object detection
@@ -249,4 +187,3 @@ if __name__ == '__main__':
     # start the flask app
     app.run(host="0.0.0.0", port=8000, debug=True,
             threaded=True, use_reloader=False)
->>>>>>> f2bbe435e9475bcfe49ddff2b2cc1f200d10d987
