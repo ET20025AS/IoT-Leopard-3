@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Robot Control</title>
+    <link rel="stylesheet" href='/static/style.css' />
+  </head>
+
+  <body>
+    <div id="video-container">
+     <img src="{{ url_for('video_feed') }}" alt="video_stream">
+    </div>
+    <div id="control-container">
+      <button id="up-button"><i class="fa fa-arrow-up"></i></button>
+      <button id="down-button"><i class="fa fa-arrow-down"></i></button>
+      <button id="left-button"><i class="fa fa-arrow-left"></i></button>
+      <button id="right-button"><i class="fa fa-arrow-right"></i></button>
+      <button id="shoot-button">Shoot</button>
+      <button id="stop-button">STOP</button>
+    </div>
+    <div id="detected-objects-dropdown">
+      <label for="detected-objects"></label>
+      <select id="detected-objects">
+        <option value="">Select an object...</option>
+      </select>
+    </div>
+  </body>
+
+  <script>
+    function updateDetectedObjects() {
+      fetch('/get_detected_objects')
+        .then(response => response.json())
+        .then(data => {
+          const dropdown = document.getElementById("detected-objects");
+          dropdown.innerHTML = `<option value="">Select an object...</option>`;
+          data.forEach((obj, index) => {
+            const option = document.createElement("option");
+            option.text = `${obj.Species} - [${obj.Position[0]}, ${obj.Position[1]}, ${obj.Position[2]}, ${obj.Position[3]}]`;
+            option.value = index;
+            dropdown.add(option);
+          });
+        })
+        .catch(error => console.error(error));
+    }
+
+    function onObjectSelected() {
+      const dropdown = document.getElementById("detected-objects");
+      const selectedObjectIndex = dropdown.value;
+
+      if (selectedObjectIndex !== "") {
+        fetch("/automatic_control", {
+          method: "POST",
+          body: new URLSearchParams({ object_index: selectedObjectIndex }),
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        }).catch((error) => console.error(error));
+      }
+    }
+
+    function sendManualControl(direction) {
+    fetch("/manual_control", {
+      method: "POST",
+      body: new URLSearchParams({ direction: direction }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    }).catch((error) => console.error(error));
+  }
+
+    // Add event listeners for the direction buttons
+    document.getElementById("up-button").addEventListener("click", () => sendManualControl("up"));
+    document.getElementById("down-button").addEventListener("click", () => sendManualControl("down"));
+    document.getElementById("left-button").addEventListener("click", () => sendManualControl("left"));
+    document.getElementById("right-button").addEventListener("click", () => sendManualControl("right"));
+
+    // Add event listener for the dropdown list
+    document.getElementById("detected-objects").addEventListener("change", onObjectSelected);
+
+    setInterval(updateDetectedObjects, 1000); // Update the detected objects every second
+  </script>
+</html>
+
+
+
