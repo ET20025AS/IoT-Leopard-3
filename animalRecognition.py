@@ -5,7 +5,6 @@ from flask import Response
 from flask import Flask
 from flask import render_template
 import threading
-import argparse
 
 # Laden des YOLOv4-Modells und seiner Gewichte
 net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
@@ -23,16 +22,10 @@ nms_threshold = 0.4
 # cap = cv2.VideoCapture(0)
 # cap = cv2.VideoCapture('Birds_12___4K_res.mp4')
 
-# benennen Sie das Fenster um und setzen Sie den Modus auf cv2.WINDOW_NORMAL
-#cv2.namedWindow("Animal Detection", cv2.WINDOW_NORMAL)
-# cv2.setWindowProperty("Animal Detection", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-#cv2.setWindowProperty("Animal Detection", cv2.WINDOW_NORMAL, cv2.WINDOW_NORMAL)
-
 # Definieren der zu erkennenden Klassen
 animal_classes = ["bird", "cat", "dog", "horse", "sheep", "cow", "bear", "person"]
 animal_class_ids = [classes.index(animal_class) for animal_class in animal_classes]
 
-# Code von Kilian für die Übertragung zur Website
 
 # initialize the output frame and a lock used to ensure thread-safe
 # exchanges of the output frames (useful when multiple browsers/tabs
@@ -41,6 +34,7 @@ outputFrame = None
 lock = threading.Lock()
 
 # initialize a flask object
+# app = Flask(__name__)
 app = Flask(__name__)
 
 
@@ -82,7 +76,6 @@ def object_detection():
 
         # Screenshot des Monitors machen
         screen = pyautogui.screenshot()
-        # screen = pyautogui.screenshot(region=(pyautogui.size().width, 0, pyautogui.size().width, pyautogui.size().height))
 
         # Umwandeln des Screenshot-Objekts in ein NumPy-Array
         img = np.array(screen)
@@ -134,14 +127,10 @@ def object_detection():
                 species_array.append({"Species": animal_classes_detected[i], "Position": [x, y, w, h]})
         # Ausgabe der erkannten Objekte
         print(species_array)
-        #cv2.imshow("Animal Detection", img)
 
         #Aktualisieren des aktuellen Frames. Aber erst dann, wenn generate thread nicht gerade outputFrame am lesen ist, um racecondition zu vermeiden
         with lock:
             outputFrame = img.copy()
-    # Freigabe der Ressourcen
-    # cap.release()
-    # cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':

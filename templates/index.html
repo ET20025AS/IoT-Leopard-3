@@ -1,9 +1,35 @@
+<!DOCTYPE html>
 <html>
   <head>
-    <title>Pi Video Surveillance</title>
+    <meta charset="utf-8">
+    <title>Robot Control</title>
+    <link rel="stylesheet" href='/static/style.css' />
+    <script src="paho/paho-mqtt.js"></script>
   </head>
   <body>
-    <h1>Pi Video Surveillance</h1>
-    <img src="{{ url_for('video_feed') }}">
+    <div id="video-container">
+     <img src="{{ url_for('video_feed') }}">
+    </div>
+    <div id="control-container">
+      <button id="up-button"><i class="fa fa-arrow-up"></i></button>
+      <button id="down-button"><i class="fa fa-arrow-down"></i></button>
+      <button id="left-button"><i class="fa fa-arrow-left"></i></button>
+      <button id="right-button"><i class="fa fa-arrow-right"></i></button>
+      <button id="shoot-button">Shoot</button>
+      <button id="stop-button">STOP</button>
+    </div>
+    <div id="object-container">
+        <h2>Object List</h2>
+        <ul id="object-list">
+          <li data-x="50" data-y="100">List Entry 1</li>
+          <li data-x="150" data-y="200">List Entry 2</li>
+          <li data-x="250" data-y="300">List Entry 3</li>
+          <!-- Add as many list entries as needed -->
+        </ul>
+      </div>
   </body>
+  <script src="../static/robot-control.js"></script>
 </html>
+
+
+
