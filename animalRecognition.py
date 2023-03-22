@@ -1,10 +1,10 @@
 import cv2
 import numpy as np
 import pyautogui
-from flask import Response
-from flask import Flask
-from flask import render_template
 import threading
+import json
+import paho.mqtt.client as mqtt
+from flask import Flask, Response, render_template, jsonify, request
 
 # Laden des YOLOv4-Modells und seiner Gewichte
 net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
@@ -25,7 +25,7 @@ nms_threshold = 0.4
 # Definieren der zu erkennenden Klassen
 animal_classes = ["bird", "cat", "dog", "horse", "sheep", "cow", "bear", "person"]
 animal_class_ids = [classes.index(animal_class) for animal_class in animal_classes]
-
+detected_objects = []
 
 # initialize the output frame and a lock used to ensure thread-safe
 # exchanges of the output frames (useful when multiple browsers/tabs
@@ -37,11 +37,57 @@ lock = threading.Lock()
 # app = Flask(__name__)
 app = Flask(__name__)
 
+mqtt_client = mqtt.Client()
+
 
 @app.route("/")
 def index():
     # return the rendered template
     return render_template("index.html")
+
+
+@app.route("/get_detected_objects", methods=["GET"])
+def get_detected_objects():
+    global detected_objects
+    with lock:
+        data = detected_objects.copy()
+    return jsonify(data)
+
+
+@app.route("/video_feed")
+def video_feed():
+    # return the response generated along with the specific media
+    # type (mime type)
+    return Response(generate(),
+                    mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+@app.route("/manual_control", methods=["POST"])
+def manual_control():
+    direction = request.form.get("direction")
+    mqtt_client.publish("manual_control", direction)
+    return "OK"
+
+
+@app.route("/automatic_control", methods=["POST"])
+def automatic_control():
+    object_index = int(request.form.get("object_index"))
+    with lock:
+        selected_object = detected_objects[object_index]
+    coordinates = json.dumps(selected_object["Position"])
+    mqtt_client.publish("automatic_control", coordinates)
+    return "OK"
+
+
+def mqtt_connect():
+    global mqtt_client
+    try:
+        mqtt_client.connect("localhost", 1883, 60)
+        mqtt_client.publish("Status", "Animal Recognition Python Script running")
+        print("connection with mqtt successfull")
+    except:
+        print("connection with mqtt not successfull")
+
 
 def generate():
     global outputFrame, lock
@@ -60,16 +106,8 @@ def generate():
                bytearray(encodedImage) + b'\r\n')
 
 
-@app.route("/video_feed")
-def video_feed():
-    # return the response generated along with the specific media
-    # type (mime type)
-    return Response(generate(),
-                    mimetype="multipart/x-mixed-replace; boundary=frame")
-
-
 def object_detection():
-    global net, classes, conf_threshold, nms_threshold, outputFrame, lock
+    global net, classes, conf_threshold, nms_threshold, outputFrame, lock, detected_objects
     while True:
         # Lesen des Kamerabildes
         # success, img = cap.read()
@@ -128,13 +166,14 @@ def object_detection():
         # Ausgabe der erkannten Objekte
         print(species_array)
 
-        #Aktualisieren des aktuellen Frames. Aber erst dann, wenn generate thread nicht gerade outputFrame am lesen ist, um racecondition zu vermeiden
+        # Aktualisieren des aktuellen Frames. Aber erst dann, wenn generate thread nicht gerade outputFrame am lesen ist, um racecondition zu vermeiden
         with lock:
+            detected_objects = species_array
             outputFrame = img.copy()
 
 
 if __name__ == '__main__':
-
+    mqtt_connect()
     # start a thread that will perform object detection
     t = threading.Thread(target=object_detection)
     t.daemon = True

@@ -1,6 +1,6 @@
 # required packages:
-opencv-python~=4.7.0.72
-numpy~=1.24.2
+opencv-python
+numpy
 
 # package installation:
 pip install opencv-python
@@ -14,6 +14,7 @@ yolov4.weights
 
 
 
-imutils~=0.5.4
-Flask~=2.2.3
-PyAutoGUI~=0.9.53
+imutils
+Flask
+PyAutoGUI
+paho-mqtt
