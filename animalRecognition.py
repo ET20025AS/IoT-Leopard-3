@@ -3,6 +3,8 @@ import numpy as np
 
 # Laden des YOLOv4-Modells und seiner Gewichte
 net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
+net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
 
 # Definieren der Klassen
 classes = []
@@ -66,20 +68,23 @@ while True:
     # Markierung der erkannten Tiere
     colors = np.random.uniform(0, 255, size=(len(animal_boxes), 3))
     species_array = []
+    animalId = 0
+    
     if len(indices) > 0:
         for i in indices.flatten():
             x, y, w, h = animal_boxes[i]
-            label = f"{animal_classes_detected[i]}: {animal_confidences[i]:.2f}"
+            label = f"{animal_classes_detected[i]} #id:{animalId}: {animal_confidences[i]:.2f}"
             color = colors[i]
             cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
             cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            species_array.append({"Species": animal_classes_detected[i], "Position": [x, y, w, h]})
+            species_array.append({"Species": animal_classes_detected[i], "id": animalId, "Position": [x, y, w, h]})
+            animalId=animalId+1
 
     # Anzeigen des Bildes
     print(species_array)
     cv2.imshow("Animal Detection", img)
     
-    # Abbrechen bei Drücken der "q"-Taste
+    # # Abbrechen bei Drücken der "q"-Taste
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
