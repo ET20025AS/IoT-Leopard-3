@@ -3,11 +3,14 @@ import numpy as np
 import pyautogui
 import threading
 import json
+import time
 import paho.mqtt.client as mqtt
 from flask import Flask, Response, render_template, jsonify, request
 
 # Laden des YOLOv4-Modells und seiner Gewichte
-net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
+#net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
+net = cv2.dnn.readNet("yolov7-tiny.weights", "yolov7-tiny.cfg")
+#net = cv2.dnn.readNet("yolov7.weights", "yolov7.cfg")
 net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
 net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
 
@@ -17,7 +20,7 @@ with open("coco.names", "r") as f:
     classes = [line.strip() for line in f.readlines()]
 
 # Definieren der Schwellenwerte für die Erkennung
-conf_threshold = 0.8
+conf_threshold = 0.6
 nms_threshold = 0.4
 
 # Starten der Kamera
@@ -93,13 +96,30 @@ def mqtt_connect():
 
 def generate():
     global outputFrame, lock
+    display_interval = 1  # Update the display every second
+    last_display_time = 0
     while True:
         with lock:
             if outputFrame is None:
                 continue
 
+            img, timestamp = outputFrame
+
+            current_time = time.time()
+
+            # Update the time difference display every second
+            if current_time - last_display_time >= display_interval:
+                # Calculate the time difference
+                time_difference = current_time - timestamp
+
+                # Display the time difference on the frame
+                time_text = f"Time_lag {time_difference:.2f}s"
+                last_display_time = current_time
+
+            cv2.putText(img, time_text, (img.shape[1] - 200, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
             # Aktuellen Frame in JPEG Format encoden (sparen von bandbreite + schneller)
-            (flag, encodedImage) = cv2.imencode(".jpg", outputFrame)
+            (flag, encodedImage) = cv2.imencode(".jpg", img)
 
             if not flag:
                 continue
@@ -116,6 +136,9 @@ def object_detection():
 
         # Screenshot des Monitors machen
         screen = pyautogui.screenshot()
+
+        # Record the time when the screenshot is taken
+        timestamp = time.time()
 
         # Umwandeln des Screenshot-Objekts in ein NumPy-Array
         img = np.array(screen)
@@ -183,7 +206,7 @@ def object_detection():
         # Aktualisieren des aktuellen Frames. Aber erst dann, wenn generate thread nicht gerade outputFrame am lesen ist, um racecondition zu vermeiden
         with lock:
             detected_objects = species_array
-            outputFrame = img.copy()
+            outputFrame = (img.copy(), timestamp)
 
 
 if __name__ == '__main__':
