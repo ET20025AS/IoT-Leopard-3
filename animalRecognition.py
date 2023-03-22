@@ -119,6 +119,14 @@ def object_detection():
 
         # Umwandeln des Screenshot-Objekts in ein NumPy-Array
         img = np.array(screen)
+        # Convert the color format from RGB to BGR
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+        # reducesize of image to increase performance
+        # new_height = int(img.shape[0] * 0.5)
+        # new_width = int(img.shape[1] * 0.5)
+        # dim = (new_width, new_height)
+        # img = cv2.resize(img, dim)
 
         # Erstellen eines Blob-Objekts aus dem Eingabebild
         blob = cv2.dnn.blobFromImage(img, 1 / 255.0, (416, 416), swapRB=True, crop=False)
@@ -155,7 +163,7 @@ def object_detection():
         indices = cv2.dnn.NMSBoxes(animal_boxes, animal_confidences, conf_threshold, nms_threshold)
 
         # Markierung der erkannten Tiere
-        colors = np.random.uniform(0, 255, size=(len(animal_boxes), 3))
+        #colors = np.random.uniform(0, 255, size=(len(animal_boxes), 3))
         species_array = []
         animalId = 0
         
@@ -163,9 +171,9 @@ def object_detection():
             for i in indices.flatten():
                 x, y, w, h = animal_boxes[i]
                 label = f"{animal_classes_detected[i]} #id:{animalId}: {animal_confidences[i]:.2f}"
-                color = colors[i]
-                cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
-                cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                #color = colors[i]
+                cv2.rectangle(img, (x, y), (x + w, y + h), [255, 0, 0], 4)
+                cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, [255, 0, 0], 2)
                 species_array.append({"Species": animal_classes_detected[i], "id": animalId, "Position": [x, y, w, h]})
                 animalId=animalId+1
                 

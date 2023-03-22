@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <title>Robot Control</title>
     <link rel="stylesheet" href='/static/style.css' />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
   </head>
 
   <body>
@@ -35,13 +36,14 @@
           dropdown.innerHTML = `<option value="">Select an object...</option>`;
           data.forEach((obj, index) => {
             const option = document.createElement("option");
-            option.text = `${obj.Species} - [${obj.Position[0]}, ${obj.Position[1]}, ${obj.Position[2]}, ${obj.Position[3]}]`;
+            option.text = `${obj.Species} #${obj.id} - [${obj.Position[0]}, ${obj.Position[1]}, ${obj.Position[2]}, ${obj.Position[3]}]`;
             option.value = index;
             dropdown.add(option);
           });
         })
         .catch(error => console.error(error));
     }
+
 
     function onObjectSelected() {
       const dropdown = document.getElementById("detected-objects");
