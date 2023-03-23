@@ -1,3 +1,5 @@
+import io
+import asyncio
 import cv2
 import numpy as np
 import pyautogui
@@ -6,20 +8,28 @@ import json
 import time
 import paho.mqtt.client as mqtt
 from flask import Flask, Response, render_template, jsonify, request
+from telegram import InputFile, Bot
 
-# Laden des YOLOv4-Modells und seiner Gewichte
-#net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
-#net = cv2.dnn.readNet("yolov7-tiny.weights", "yolov7-tiny.cfg")
-net = cv2.dnn.readNet("yolov7.weights", "yolov7.cfg")
+# Telegram Bot config
+TOKEN = '5909099367:AAHyVpl-KBTBxAFWezoTIajDTX-cB0Ng-7M'
+CHAT_ID = '5332989880'
+last_notification_time = 0
+notification_interval = 10
+
+
+# Load the model and weights
+# net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
+net = cv2.dnn.readNet("yolov7-tiny.weights", "yolov7-tiny.cfg")
+# net = cv2.dnn.readNet("yolov7.weights", "yolov7.cfg")
 net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
 net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
 
-# Definieren der Klassen
+# Define classes using coco.names file
 classes = []
 with open("coco.names", "r") as f:
     classes = [line.strip() for line in f.readlines()]
 
-# Definieren der Schwellenwerte für die Erkennung
+# Define the confidence and NMS thresholds for object detection
 conf_threshold = 0.6
 nms_threshold = 0.4
 
@@ -27,19 +37,16 @@ nms_threshold = 0.4
 # cap = cv2.VideoCapture(0)
 # cap = cv2.VideoCapture('Birds_12___4K_res.mp4')
 
-# Definieren der zu erkennenden Klassen
+# Define the classes to detect
 animal_classes = ["bird", "cat", "dog", "horse", "sheep", "cow", "bear", "person"]
 animal_class_ids = [classes.index(animal_class) for animal_class in animal_classes]
 detected_objects = []
 
-# initialize the output frame and a lock used to ensure thread-safe
-# exchanges of the output frames (useful when multiple browsers/tabs
-# are viewing the stream)
+# Initialize the output frame and a lock for thread-safe frame exchange
 outputFrame = None
 lock = threading.Lock()
 
 # initialize a flask object
-# app = Flask(__name__)
 app = Flask(__name__)
 
 mqtt_client = mqtt.Client()
@@ -53,6 +60,7 @@ def index():
 
 @app.route("/get_detected_objects", methods=["GET"])
 def get_detected_objects():
+    # Return a list of detected objects as a JSON response
     global detected_objects
     with lock:
         data = detected_objects.copy()
@@ -61,14 +69,14 @@ def get_detected_objects():
 
 @app.route("/video_feed")
 def video_feed():
-    # return the response generated along with the specific media
-    # type (mime type)
+    # Return the video feed as a Response object
     return Response(generate(),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.route("/manual_control", methods=["POST"])
 def manual_control():
+    # Publish the manual control direction to MQTT
     direction = request.form.get("direction")
     mqtt_client.publish("manual_control", direction)
     return "OK"
@@ -76,6 +84,7 @@ def manual_control():
 
 @app.route("/automatic_control", methods=["POST"])
 def automatic_control():
+    # Publish the selected object's coordinates for automatic control to MQTT
     object_index = int(request.form.get("object_index"))
     with lock:
         selected_object = detected_objects[object_index]
@@ -85,6 +94,7 @@ def automatic_control():
 
 
 def mqtt_connect():
+    # Connect to the MQTT broker
     global mqtt_client
     try:
         mqtt_client.connect("localhost", 1883, 60)
@@ -95,6 +105,7 @@ def mqtt_connect():
 
 
 def generate():
+    # Generate the video feed
     global outputFrame, lock
     display_interval = 1  # Update the display every second
     last_display_time = 0
@@ -118,7 +129,7 @@ def generate():
 
             cv2.putText(img, time_text, (img.shape[1] - 200, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-            # Aktuellen Frame in JPEG Format encoden (sparen von bandbreite + schneller)
+            # Encode the current frame as JPEG (saves bandwidth and is faster)
             (flag, encodedImage) = cv2.imencode(".jpg", img)
 
             if not flag:
@@ -128,8 +139,22 @@ def generate():
                bytearray(encodedImage) + b'\r\n')
 
 
+async def send_telegram_notification(image, caption):
+    # Send a Telegram message and photo to the specified chat
+    bot = Bot(token=TOKEN)
+    await bot.send_message(chat_id=CHAT_ID, text=caption)
+    await bot.send_photo(chat_id=CHAT_ID, photo=InputFile(io.BytesIO(cv2.imencode('.jpg', image)[1].tobytes()),
+                                                          filename="detected_object.jpg"))
+
+
+def send_notification_and_image(image, caption):
+    # Run the send_telegram_notification() function asynchronously
+    asyncio.run(send_telegram_notification(image, caption))
+
+
 def object_detection():
-    global net, classes, conf_threshold, nms_threshold, outputFrame, lock, detected_objects
+    # Perform object detection on the input frames
+    global net, classes, conf_threshold, nms_threshold, outputFrame, lock, detected_objects, horse_detected, last_notification_time, notification_interval
     while True:
         # Lesen des Kamerabildes
         # success, img = cap.read()
@@ -140,28 +165,28 @@ def object_detection():
         # Record the time when the screenshot is taken
         timestamp = time.time()
 
-        # Umwandeln des Screenshot-Objekts in ein NumPy-Array
+        # Convert the screenshot object to a NumPy array
         img = np.array(screen)
         # Convert the color format from RGB to BGR
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
-        resize_scale = 0.5  # Adjust this value to change the image resolution
+        resize_scale = 1  # Adjust this value to change the image resolution
         new_width = int(img.shape[1] * resize_scale)
         new_height = int(img.shape[0] * resize_scale)
         img = cv2.resize(img, (new_width, new_height))
 
-        # Erstellen eines Blob-Objekts aus dem Eingabebild
+        # Create a blob object from the input image
         blob = cv2.dnn.blobFromImage(img, 1 / 255.0, (416, 416), swapRB=True, crop=False)
 
-        # Setzen des Blob-Objekts als Eingabe für das Modell
+        # Set the blob object as the input for the model
         net.setInput(blob)
 
-        # Durchführen der Vorwärtsdurchlauf-Operationen
+        # Perform the forward pass operations
         layer_names = net.getLayerNames()
         output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
         outputs = net.forward(output_layers)
 
-        # Erkennung der Tiere
+        # Detect animals in the frame
         animal_boxes = []
         animal_classes_detected = []
         animal_confidences = []
@@ -181,28 +206,34 @@ def object_detection():
                     animal_classes_detected.append(animal_classes[animal_class_ids.index(class_id)])
                     animal_confidences.append(float(confidence))
 
-        # Anwenden der Nicht-Maximum-Unterdrückung
+        # Apply Non-Maximum Suppressio
         indices = cv2.dnn.NMSBoxes(animal_boxes, animal_confidences, conf_threshold, nms_threshold)
 
-        # Markierung der erkannten Tiere
-        #colors = np.random.uniform(0, 255, size=(len(animal_boxes), 3))
+        # Draw the detected animals on the frame
         species_array = []
         animalId = 0
-        
+        horse_detected = False
+
         if len(indices) > 0:
             for i in indices.flatten():
                 x, y, w, h = animal_boxes[i]
                 label = f"{animal_classes_detected[i]} #id:{animalId}: {animal_confidences[i]:.2f}"
-                #color = colors[i]
                 cv2.rectangle(img, (x, y), (x + w, y + h), [255, 0, 0], 4)
                 cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, [255, 0, 0], 2)
                 species_array.append({"Species": animal_classes_detected[i], "id": animalId, "Position": [x, y, w, h]})
-                animalId=animalId+1
-                
-        # Ausgabe der erkannten Objekte
+                animalId = animalId + 1
+
+                if animal_classes_detected[i] == "horse":
+                    horse_detected = True
+
+        if horse_detected and (time.time() - last_notification_time) >= notification_interval:
+            last_notification_time = time.time()
+            send_notification_and_image(img, "A wild horse has been detected!")
+
+        # Print the detected objects
         print(species_array)
 
-        # Aktualisieren des aktuellen Frames. Aber erst dann, wenn generate thread nicht gerade outputFrame am lesen ist, um racecondition zu vermeiden
+        ## Update the current frame while avoiding race condition with the generate() thread
         with lock:
             detected_objects = species_array
             outputFrame = (img.copy(), timestamp)
