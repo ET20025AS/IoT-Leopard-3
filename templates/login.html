@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="login-container">
+    <div class="image-wrapper" style="background-image: url('{{ url_for('static', filename='utopian.png') }}');"></div>
+    <div class="image-wrapper" style="background-image: url('{{ url_for('static', filename='dystopian.png') }}');"></div>
+      <div class="title">IoT</div>
+    <div class="login-form">
+        <form action="/login" method="POST">
+        <input type="text" name="username" placeholder="Username">
+        <input type="password" name="password" placeholder="Password">
+        <input class="login-button" type="submit" value="Login">
+    </form>
+    </div>
+  </div>
+</body>
+</html>

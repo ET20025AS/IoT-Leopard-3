@@ -7,15 +7,15 @@ import threading
 import json
 import time
 import paho.mqtt.client as mqtt
-from flask import Flask, Response, render_template, jsonify, request
+from flask import Flask, Response, render_template, jsonify, request, redirect, url_for
 from telegram import InputFile, Bot
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
 # Telegram Bot config
 TOKEN = '5909099367:AAHyVpl-KBTBxAFWezoTIajDTX-cB0Ng-7M'
 CHAT_ID = '5332989880'
 last_notification_time = 0
-notification_interval = 10
-
+notification_interval = 300
 
 # Load the model and weights
 # net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
@@ -48,14 +48,9 @@ lock = threading.Lock()
 
 # initialize a flask object
 app = Flask(__name__)
+app.secret_key = "your-secret-key-here"
 
 mqtt_client = mqtt.Client()
-
-
-@app.route("/")
-def index():
-    # return the rendered template
-    return render_template("index.html")
 
 
 @app.route("/get_detected_objects", methods=["GET"])
@@ -152,6 +147,60 @@ def send_notification_and_image(image, caption):
     asyncio.run(send_telegram_notification(image, caption))
 
 
+# Initialize the LoginManager
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+
+# Create a User class that inherits from UserMixin
+class User(UserMixin):
+    def __init__(self, id):
+        self.id = id
+
+
+# A dictionary to store users with their corresponding passwords (for demo purposes only)
+# In a production environment, use a secure database to store user credentials
+users = {'admin': {'password': 'password'}}
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    if user_id not in users:
+        return
+    return User(user_id)
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        user_id = request.form.get('username')
+        password = request.form.get('password')
+
+        if user_id in users and users[user_id]['password'] == password:
+            user = User(user_id)
+            login_user(user)
+            return redirect(url_for('index'))
+
+        return render_template('login.html', error='Invalid username or password.')
+
+    return render_template('login.html')
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+
+@app.route('/')
+@login_required
+def index():
+    # return the rendered template
+    return render_template("index.html")
+
+
 def object_detection():
     # Perform object detection on the input frames
     global net, classes, conf_threshold, nms_threshold, outputFrame, lock, detected_objects, horse_detected, last_notification_time, notification_interval
@@ -231,7 +280,7 @@ def object_detection():
             send_notification_and_image(img, "A wild horse has been detected!")
 
         # Print the detected objects
-        print(species_array)
+        # print(species_array)
 
         ## Update the current frame while avoiding race condition with the generate() thread
         with lock:
