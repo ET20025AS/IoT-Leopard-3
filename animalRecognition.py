@@ -70,7 +70,7 @@ def video_feed():
 @app.route("/manual_control", methods=["POST"])
 def manual_control():
     direction = request.form.get("direction")
-    mqtt_client.publish("manual_control", direction)
+    mqtt_client.publish("iot/dhbw/leopard3/manual_control", direction)
     return "OK"
 
 
@@ -80,7 +80,7 @@ def automatic_control():
     with lock:
         selected_object = detected_objects[object_index]
     coordinates = json.dumps(selected_object["Position"])
-    mqtt_client.publish("automatic_control", coordinates)
+    mqtt_client.publish("iot/dhbw/leopard3/automatic_control", coordinates)
     return "OK"
 
 
@@ -88,7 +88,7 @@ def mqtt_connect():
     global mqtt_client
     try:
         mqtt_client.connect("localhost", 1883, 60)
-        mqtt_client.publish("Status", "Animal Recognition Python Script running")
+        mqtt_client.publish("iot/dhbw/leopard3/automatic_control/Status", "Animal Recognition Python Script running")
         print("connection with mqtt successfull")
     except:
         print("connection with mqtt not successfull")
@@ -145,7 +145,7 @@ def object_detection():
         # Convert the color format from RGB to BGR
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
-        resize_scale = 0.5  # Adjust this value to change the image resolution
+        resize_scale = 1  # Adjust this value to change the image resolution
         new_width = int(img.shape[1] * resize_scale)
         new_height = int(img.shape[0] * resize_scale)
         img = cv2.resize(img, (new_width, new_height))
@@ -200,7 +200,7 @@ def object_detection():
                 animalId=animalId+1
                 
         # Ausgabe der erkannten Objekte
-        print(species_array)
+        # print(species_array)
 
         # Aktualisieren des aktuellen Frames. Aber erst dann, wenn generate thread nicht gerade outputFrame am lesen ist, um racecondition zu vermeiden
         with lock:
