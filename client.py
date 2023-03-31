@@ -14,7 +14,7 @@ client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, BUFF_SIZE)
 
 # Abrufen des Hostnamens und der IP-Adresse des Hosts
 host_name = socket.gethostname()
-host_ip = '192.168.0.29'
+host_ip = '192.168.188.29'
 
 # Drucken der IP-Adresse des Hosts
 print(host_ip)
@@ -25,8 +25,8 @@ message = b'PC'
 client_socket.sendto(message, (host_ip, port))
 
 # Erstellen eines Fensters zur Anzeige des empfangenen Videos
-cv2.namedWindow("RECEIVING VIDEO", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("RECEIVING VIDEO", 400, 200)
+#cv2.namedWindow("RECEIVING VIDEO", cv2.WINDOW_NORMAL)
+#cv2.resizeWindow("RECEIVING VIDEO", 400, 200)
 
 # Endlose Schleife zur Verarbeitung der empfangenen Video-Frames
 while True:
@@ -44,15 +44,5 @@ while True:
     # frame = cv2.resize(frame, (800, 600))
 
     # Anzeigen des Bildes im Fenster "RECEIVING VIDEO"
-    cv2.imshow("RECEIVING VIDEO", frame)
+    #cv2.imshow("RECEIVING VIDEO", frame)
 
-    # Warten auf eine Tastatureingabe (maximal 1 Millisekunde)
-    key = cv2.waitKey(1) & 0xFF
-
-    # Wenn die Taste "q" gedrückt wird, schließen Sie den Socket und brechen Sie die Schleife ab
-    if key == ord('q'):
-        client_socket.close()
-        break
-
-# Schließen des Fensters und Beenden des Programms
-cv2.destroyAllWindows()

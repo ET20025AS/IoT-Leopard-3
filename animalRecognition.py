@@ -1,19 +1,13 @@
-import io
-import asyncio
 import cv2
 import numpy as np
 import pyautogui
 import threading
 import json
 import time
-import paho.mqtt.client as mqtt
 from flask import Flask, Response, render_template, jsonify, request, redirect, url_for
-from telegram import InputFile, Bot
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from utils import mqtt_connect, mqtt_client, send_notification_and_image
 
-# Telegram Bot config
-TOKEN = '5909099367:AAHyVpl-KBTBxAFWezoTIajDTX-cB0Ng-7M'
-CHAT_ID = '5332989880'
 last_notification_time = 0
 notification_interval = 300
 
@@ -38,7 +32,8 @@ nms_threshold = 0.4
 # cap = cv2.VideoCapture('Birds_12___4K_res.mp4')
 
 # Define the classes to detect
-animal_classes = ["bird", "cat", "dog", "horse", "sheep", "cow", "bear", "person"]
+# animal_classes = ["bird", "cat", "dog", "horse", "sheep", "cow", "bear", "person"]
+animal_classes = ["bird", "person"]
 animal_class_ids = [classes.index(animal_class) for animal_class in animal_classes]
 detected_objects = []
 
@@ -49,8 +44,6 @@ lock = threading.Lock()
 # initialize a flask object
 app = Flask(__name__)
 app.secret_key = "your-secret-key-here"
-
-mqtt_client = mqtt.Client()
 
 
 @app.route("/get_detected_objects", methods=["GET"])
@@ -88,17 +81,6 @@ def automatic_control():
     return "OK"
 
 
-def mqtt_connect():
-    # Connect to the MQTT broker
-    global mqtt_client
-    try:
-        mqtt_client.connect("localhost", 1883, 60)
-        mqtt_client.publish("Status", "Animal Recognition Python Script running")
-        print("connection with mqtt successfull")
-    except:
-        print("connection with mqtt not successfull")
-
-
 def generate():
     # Generate the video feed
     global outputFrame, lock
@@ -132,19 +114,6 @@ def generate():
 
         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +
                bytearray(encodedImage) + b'\r\n')
-
-
-async def send_telegram_notification(image, caption):
-    # Send a Telegram message and photo to the specified chat
-    bot = Bot(token=TOKEN)
-    await bot.send_message(chat_id=CHAT_ID, text=caption)
-    await bot.send_photo(chat_id=CHAT_ID, photo=InputFile(io.BytesIO(cv2.imencode('.jpg', image)[1].tobytes()),
-                                                          filename="detected_object.jpg"))
-
-
-def send_notification_and_image(image, caption):
-    # Run the send_telegram_notification() function asynchronously
-    asyncio.run(send_telegram_notification(image, caption))
 
 
 # Initialize the LoginManager
@@ -205,9 +174,6 @@ def object_detection():
     # Perform object detection on the input frames
     global net, classes, conf_threshold, nms_threshold, outputFrame, lock, detected_objects, horse_detected, last_notification_time, notification_interval
     while True:
-        # Lesen des Kamerabildes
-        # success, img = cap.read()
-
         # Screenshot des Monitors machen
         screen = pyautogui.screenshot()
 
