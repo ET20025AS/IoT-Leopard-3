@@ -24,25 +24,14 @@ port = 9999
 message = b'PC'
 client_socket.sendto(message, (host_ip, port))
 
-# Erstellen eines Fensters zur Anzeige des empfangenen Videos
-#cv2.namedWindow("RECEIVING VIDEO", cv2.WINDOW_NORMAL)
-#cv2.resizeWindow("RECEIVING VIDEO", 400, 200)
 
-# Endlose Schleife zur Verarbeitung der empfangenen Video-Frames
-while True:
-    # Empfangen der Video-Datenpakete und Dekodieren der Base64-codierten Daten
-    packet, _ = client_socket.recvfrom(BUFF_SIZE)
-    data = base64.b64decode(packet, ' /')
+def receive_frames():
+    global current_frame, output_frame_lock
+    while True:
+        packet, _ = client_socket.recvfrom(BUFF_SIZE)
+        data = base64.b64decode(packet, ' /')
+        npdata = np.fromstring(data, dtype=np.uint8)
+        frame = cv2.imdecode(npdata, 1)
 
-    # Umwandeln der Daten in ein Numpy-Array mit uint8-Datentyp
-    npdata = np.fromstring(data, dtype=np.uint8)
-
-    # Dekodieren der Numpy-Daten als Bild mit cv2.imdecode()
-    frame = cv2.imdecode(npdata, 1)
-
-    # Anpassen der Größe des Bildes auf 800x600
-    # frame = cv2.resize(frame, (800, 600))
-
-    # Anzeigen des Bildes im Fenster "RECEIVING VIDEO"
-    #cv2.imshow("RECEIVING VIDEO", frame)
-
+        with output_frame_lock:
+            current_frame = frame

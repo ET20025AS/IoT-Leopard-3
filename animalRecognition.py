@@ -7,6 +7,8 @@ import time
 from flask import Flask, Response, render_template, jsonify, request, redirect, url_for
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from utils import mqtt_connect, mqtt_client, send_notification_and_image
+import base64
+import socket
 
 last_notification_time = 0
 notification_interval = 300
@@ -37,20 +39,56 @@ animal_classes = ["bird", "person"]
 animal_class_ids = [classes.index(animal_class) for animal_class in animal_classes]
 detected_objects = []
 
-# Initialize the output frame and a lock for thread-safe frame exchange
+# Initialize the output frame and a output_frame_lock for thread-safe frame exchange
 outputFrame = None
-lock = threading.Lock()
+output_frame_lock = threading.Lock()
+
+current_frame = None
+input_frame_lock = threading.Lock()
 
 # initialize a flask object
 app = Flask(__name__)
 app.secret_key = "your-secret-key-here"
+
+# Festlegen der Größe des Empfangspuffers
+BUFF_SIZE = 65536
+
+# Erstellen des Sockets für die Kommunikation
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# Erhöhen der Größe des Empfangspuffers
+client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, BUFF_SIZE)
+
+# Abrufen des Hostnamens und der IP-Adresse des Hosts
+host_name = socket.gethostname()
+host_ip = '192.168.188.29'
+
+# Drucken der IP-Adresse des Hosts
+print(host_ip)
+
+# Festlegen des Ports und Senden einer Nachricht an den Server
+port = 9999
+message = b'PC'
+client_socket.sendto(message, (host_ip, port))
+
+
+def receive_frames():
+    global current_frame, output_frame_lock
+    while True:
+        packet, _ = client_socket.recvfrom(BUFF_SIZE)
+        data = base64.b64decode(packet, ' /')
+        npdata = np.fromstring(data, dtype=np.uint8)
+        frame = cv2.imdecode(npdata, 1)
+
+        with output_frame_lock:
+            current_frame = frame
 
 
 @app.route("/get_detected_objects", methods=["GET"])
 def get_detected_objects():
     # Return a list of detected objects as a JSON response
     global detected_objects
-    with lock:
+    with output_frame_lock:
         data = detected_objects.copy()
     return jsonify(data)
 
@@ -74,7 +112,7 @@ def manual_control():
 def automatic_control():
     # Publish the selected object's coordinates for automatic control to MQTT
     object_index = int(request.form.get("object_index"))
-    with lock:
+    with output_frame_lock:
         selected_object = detected_objects[object_index]
     coordinates = json.dumps(selected_object["Position"])
     mqtt_client.publish("automatic_control", coordinates)
@@ -83,28 +121,28 @@ def automatic_control():
 
 def generate():
     # Generate the video feed
-    global outputFrame, lock
-    display_interval = 1  # Update the display every second
-    last_display_time = 0
+    global outputFrame, output_frame_lock
+    # display_interval = 1  # Update the display every second
+    # last_display_time = 0
     while True:
-        with lock:
+        with output_frame_lock:
             if outputFrame is None:
                 continue
 
             img, timestamp = outputFrame
 
-            current_time = time.time()
+            # current_time = time.time()
 
-            # Update the time difference display every second
-            if current_time - last_display_time >= display_interval:
-                # Calculate the time difference
-                time_difference = current_time - timestamp
-
-                # Display the time difference on the frame
-                time_text = f"Time_lag {time_difference:.2f}s"
-                last_display_time = current_time
-
-            cv2.putText(img, time_text, (img.shape[1] - 200, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            # # Update the time difference display every second
+            # if current_time - last_display_time >= display_interval:
+            #     # Calculate the time difference
+            #     time_difference = current_time - timestamp
+            #
+            #     # Display the time difference on the frame
+            #     time_text = f"Time_lag {time_difference:.2f}s"
+            #     last_display_time = current_time
+            #
+            # cv2.putText(img, time_text, (img.shape[1] - 200, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
             # Encode the current frame as JPEG (saves bandwidth and is faster)
             (flag, encodedImage) = cv2.imencode(".jpg", img)
@@ -172,23 +210,29 @@ def index():
 
 def object_detection():
     # Perform object detection on the input frames
-    global net, classes, conf_threshold, nms_threshold, outputFrame, lock, detected_objects, horse_detected, last_notification_time, notification_interval
+    global net, classes, conf_threshold, nms_threshold, outputFrame, output_frame_lock, detected_objects, last_notification_time, notification_interval, current_frame
     while True:
         # Screenshot des Monitors machen
-        screen = pyautogui.screenshot()
+        # frame = pyautogui.screenshot()
+
+        # Get the current frame from client.py
+        with output_frame_lock:
+            if current_frame is None:
+                continue
+            frame = current_frame.copy()
 
         # Record the time when the screenshot is taken
         timestamp = time.time()
 
         # Convert the screenshot object to a NumPy array
-        img = np.array(screen)
+        img = np.array(frame)
         # Convert the color format from RGB to BGR
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        # img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
-        resize_scale = 1  # Adjust this value to change the image resolution
-        new_width = int(img.shape[1] * resize_scale)
-        new_height = int(img.shape[0] * resize_scale)
-        img = cv2.resize(img, (new_width, new_height))
+        # resize_scale = 1  # Adjust this value to change the image resolution
+        # new_width = int(img.shape[1] * resize_scale)
+        # new_height = int(img.shape[0] * resize_scale)
+        # img = cv2.resize(img, (new_width, new_height))
 
         # Create a blob object from the input image
         blob = cv2.dnn.blobFromImage(img, 1 / 255.0, (416, 416), swapRB=True, crop=False)
@@ -233,8 +277,8 @@ def object_detection():
             for i in indices.flatten():
                 x, y, w, h = animal_boxes[i]
                 label = f"{animal_classes_detected[i]} #id:{animalId}: {animal_confidences[i]:.2f}"
-                cv2.rectangle(img, (x, y), (x + w, y + h), [255, 0, 0], 4)
-                cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, [255, 0, 0], 2)
+                cv2.rectangle(img, (x, y), (x + w, y + h), [255, 0, 0], 2)
+                cv2.putText(img, label, (x, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.8, [255, 0, 0], 2)
                 species_array.append({"Species": animal_classes_detected[i], "id": animalId, "Position": [x, y, w, h]})
                 animalId = animalId + 1
 
@@ -249,17 +293,24 @@ def object_detection():
         # print(species_array)
 
         ## Update the current frame while avoiding race condition with the generate() thread
-        with lock:
+        with output_frame_lock:
             detected_objects = species_array
             outputFrame = (img.copy(), timestamp)
 
 
 if __name__ == '__main__':
     mqtt_connect()
+
     # start a thread that will perform object detection
     t = threading.Thread(target=object_detection)
     t.daemon = True
     t.start()
+
+    # start a thread that will receive frames from the client
+    t_receive = threading.Thread(target=receive_frames)
+    t_receive.daemon = True
+    t_receive.start()
+
     # start the flask app
     app.run(host="0.0.0.0", port=8000, debug=True,
             threaded=True, use_reloader=False)
