@@ -104,7 +104,7 @@ def video_feed():
 def manual_control():
     # Publish the manual control direction to MQTT
     direction = request.form.get("direction")
-    mqtt_client.publish("manual_control", direction)
+    mqtt_client.publish("iot/dhbw/leopard3/manual_control", direction)
     return "OK"
 
 
@@ -115,7 +115,7 @@ def automatic_control():
     with output_frame_lock:
         selected_object = detected_objects[object_index]
     coordinates = json.dumps(selected_object["Position"])
-    mqtt_client.publish("automatic_control", coordinates)
+    mqtt_client.publish("iot/dhbw/leopard3/automatic_control", coordinates)
     return "OK"
 
 
