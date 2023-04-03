@@ -5,6 +5,16 @@
 import paho.mqtt.client as mqtt
 import re
 
+#I2C libraries 
+import sys 
+import smbus2 as smbus
+import time 
+
+# Slave Adresse
+I2C_SLAVE_ADDRESS = 11
+#create the I2C bus 
+I2Cbus=smbus.SMBus(1)
+
 MQTT_SERVER = "localhost"
 MQTT_TOPIC1 = "iot/dhbw/leopard3/automatic_control"
 MQTT_TOPIC2 = "iot/dhbw/leopard3/manual_control"
@@ -33,29 +43,38 @@ def on_message(client, userdata, msg):
         numbers = re.findall(r'-?\d+\.?\d*', message)
         x = numbers[0]
         y = numbers[1]
-        print(x, y)
+        
+        I2Cbus.write_byte(I2C_SLAVE_ADDRESS,x)
+        time.sleep(3) 
+        I2Cbus.write_byte(I2C_SLAVE_ADDRESS,y)
+        time.sleep(3)
+     
     elif msg.topic == MQTT_TOPIC2:
         # message: commands: "up", "down", "left", "right", "shoot"
+
         if message == "up":
-            # Younes part (I2C Communication to Arduino)
-            # Platzhalter
-            a = 1
+            num=254
+            I2Cbus.write_byte(I2C_SLAVE_ADDRESS,num)
+            time.sleep(3)
         elif message == "down":
-            # Younes part (I2C Communication to Arduino)
-            # Platzhalter
-            a = 2
+            num=253
+            I2Cbus.write_byte(I2C_SLAVE_ADDRESS,num)
+            time.sleep(3)
         elif message == "left":
-            # Younes part (I2C Communication to Arduino)
-            # Platzhalter
-            a = 3
+            num=252
+            I2Cbus.write_byte(I2C_SLAVE_ADDRESS,num)
+            time.sleep(3)
         elif message == "right":
-            # Younes part (I2C Communication to Arduino)
-            # Platzhalter
-            a = 4
+            num=251
+            I2Cbus.write_byte(I2C_SLAVE_ADDRESS,num)
+            time.sleep(3)
         elif message == "shoot":
-            # Younes part (I2C Communication to Arduino)
-            # Platzhalter
-            a = 5
+            num=250
+            I2Cbus.write_byte(I2C_SLAVE_ADDRESS,num)
+            time.sleep(3)    
+
+           
+              
 
 
 client = mqtt.Client()
