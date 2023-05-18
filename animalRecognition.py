@@ -1,3 +1,6 @@
+"""""""""""""""""""""""""""""""""""
+    Imports
+"""""""""""""""""""""""""""""""""""
 import cv2
 import numpy as np
 import pyautogui
@@ -9,36 +12,44 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from utils import mqtt_connect, mqtt_client, send_notification_and_image
 import base64
 import socket
+from sort.sort import Sort
 
 last_notification_time = 0
 notification_interval = 300
 
+""""""""""""""""""""""""""""""""""" 
+    Object Tracking Initializations 
+"""""""""""""""""""""""""""""""""""
 # Load the model and weights
-# net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
-net = cv2.dnn.readNet("yolov7-tiny.weights", "yolov7-tiny.cfg")
-# net = cv2.dnn.readNet("yolov7.weights", "yolov7.cfg")
-net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
-net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+weights_path = 'yolov7-tiny.weights'
+config_path  = 'yolov7-tiny.cfg'
+classes_file = 'coco.names'
 
-# Define classes using coco.names file
-classes = []
-with open("coco.names", "r") as f:
+# read class names
+with open(classes_file, 'r') as f:
     classes = [line.strip() for line in f.readlines()]
 
-# Define the confidence and NMS thresholds for object detection
-conf_threshold = 0.6
-nms_threshold = 0.4
+# initialize network
+net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
 
-# Starten der Kamera
-# cap = cv2.VideoCapture(0)
-# cap = cv2.VideoCapture('Birds_12___4K_res.mp4')
+# set tracking target classes
+animals = ['bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'person', 'giraffe']
+animals_ids = [classes.index(animal) for animal in animals if animal in classes]
 
-# Define the classes to detect
-# animal_classes = ["bird", "cat", "dog", "horse", "sheep", "cow", "bear", "person"]
-animal_classes = ["bird", "person"]
-animal_class_ids = [classes.index(animal_class) for animal_class in animal_classes]
+# initialize SORT tracker
+tracker = Sort()
 detected_objects = []
 
+# output layer handling
+def get_output_layers(net):
+    layer_names = net.getLayerNames()
+    output_layers_indices = net.getUnconnectedOutLayers().flatten()
+    output_layers = [layer_names[i - 1] for i in output_layers_indices]
+    return output_layers
+
+"""""""""""""""""""""""""""""""""""
+    Threading Initializations / Flask / Socket
+"""""""""""""""""""""""""""""""""""
 # Initialize the output frame and a output_frame_lock for thread-safe frame exchange
 outputFrame = None
 output_frame_lock = threading.Lock()
@@ -234,63 +245,63 @@ def object_detection():
         # new_height = int(img.shape[0] * resize_scale)
         # img = cv2.resize(img, (new_width, new_height))
 
-        # Create a blob object from the input image
-        blob = cv2.dnn.blobFromImage(img, 1 / 255.0, (416, 416), swapRB=True, crop=False)
+        height, width, channels = img.shape
 
-        # Set the blob object as the input for the model
+        # create blob from image for processing
+        blob = cv2.dnn.blobFromImage(img, 1 / 255.0, (416, 416), (0, 0, 0), True, crop=False)
         net.setInput(blob)
+        outs = net.forward(get_output_layers(net))
 
-        # Perform the forward pass operations
-        layer_names = net.getLayerNames()
-        output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
-        outputs = net.forward(output_layers)
-
-        # Detect animals in the frame
-        animal_boxes = []
-        animal_classes_detected = []
-        animal_confidences = []
-        for output in outputs:
-            for detection in output:
+        # extract detections from net output
+        detections = []
+        for output in outs:
+            for detection in output.reshape(-1, 85):
                 scores = detection[5:]
                 class_id = np.argmax(scores)
-                confidence = scores[class_id]
-                if class_id in animal_class_ids and confidence > conf_threshold:
-                    center_x = int(detection[0] * img.shape[1])
-                    center_y = int(detection[1] * img.shape[0])
-                    width = int(detection[2] * img.shape[1])
-                    height = int(detection[3] * img.shape[0])
-                    left = int(center_x - width / 2)
-                    top = int(center_y - height / 2)
-                    animal_boxes.append([left, top, width, height])
-                    animal_classes_detected.append(animal_classes[animal_class_ids.index(class_id)])
-                    animal_confidences.append(float(confidence))
+                if class_id in animals_ids:
+                    confidence = scores[class_id]
+                    if confidence > 0.5:
+                        # object img calculation
+                        center_x = int(detection[0] * width)
+                        center_y = int(detection[1] * height)
+                        w = int(detection[2] * width)
+                        h = int(detection[3] * height)
+                        x = center_x - w // 2
+                        y = center_y - h // 2
 
-        # Apply Non-Maximum Suppressio
-        indices = cv2.dnn.NMSBoxes(animal_boxes, animal_confidences, conf_threshold, nms_threshold)
+                        # add detection to list
+                        detections.append([x, y, x + w, y + h, confidence, class_id])
 
-        # Draw the detected animals on the frame
+        # apply NMS to detections
+        if len(detections) > 0:
+            detections = np.array(detections)
+            nms_threshold = 0.4
+            keep_indices = cv2.dnn.NMSBoxes(detections[:, :4].tolist(), detections[:, 4].tolist(), 0.5, nms_threshold)
+            nms_detections = np.array([detections[i] for i in keep_indices.flatten()])
+        else:
+            nms_detections = np.empty(shape=(0, 6))
+
+        # track objects with SORT
+        tracked_objects = tracker.update(nms_detections)
+
+        # draw imgs and descriptions in camera feed
         species_array = []
-        animalId = 0
-        horse_detected = False
+        person_detected = False
+        for tracked_object in tracked_objects:   
+            x, y, x2, y2, obj_id, class_id = map(int, tracked_object)
+            obj_name = classes[class_id]
+            label = f"{obj_name} ID: {obj_id}"
+            color = (0, 255, 0)
+            cv2.rectangle(img, (x, y), (x2, y2), color, 2)
+            cv2.putText(img, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            species_array.append({"Species": obj_name, "id": obj_id, "Position": [(x+x2)//2, (y+y2)//2]})
 
-        if len(indices) > 0:
-            for i in indices.flatten():
-                x, y, w, h = animal_boxes[i]
-                label = f"{animal_classes_detected[i]} #id:{animalId}: {animal_confidences[i]:.2f}"
-                cv2.rectangle(img, (x, y), (x + w, y + h), [255, 0, 0], 2)
-                cv2.putText(img, label, (x, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.8, [255, 0, 0], 2)
-                species_array.append({"Species": animal_classes_detected[i], "id": animalId, "Position": [x, y, w, h]})
-                animalId = animalId + 1
+            if obj_name == "person":
+                person_detected = True
 
-                if animal_classes_detected[i] == "horse":
-                    horse_detected = True
-
-        if horse_detected and (time.time() - last_notification_time) >= notification_interval:
+        if person_detected and (time.time() - last_notification_time) >= notification_interval:
             last_notification_time = time.time()
-            send_notification_and_image(img, "A wild horse has been detected!")
-
-        # Print the detected objects
-        # print(species_array)
+            send_notification_and_image(img, "An intruder has been detected!")
 
         ## Update the current frame while avoiding race condition with the generate() thread
         with output_frame_lock:
@@ -298,6 +309,9 @@ def object_detection():
             outputFrame = (img.copy(), timestamp)
 
 
+"""""""""""""""""""""""""""""""""""
+    Main program
+"""""""""""""""""""""""""""""""""""
 if __name__ == '__main__':
     mqtt_connect()
 

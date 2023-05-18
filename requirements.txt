@@ -1,20 +1,12 @@
 # required packages:
 opencv-python
 numpy
-
-# package installation:
-pip install opencv-python
-pip install numpy
-pip install Pillow
-
-# required models: 
-# available on: https://github.com/AlexeyAB/darknet/releases/tag/darknet_yolo_v3_optimal:
-yolov4.cfg
-yolov4.weights
-
-
-
 imutils
 Flask
 PyAutoGUI
 paho-mqtt
+
+# required models: 
+# available on: https://github.com/AlexeyAB/darknet/releases/tag/darknet_yolo_v3_optimal:
+# yolov4.cfg
+# yolov4.weights
