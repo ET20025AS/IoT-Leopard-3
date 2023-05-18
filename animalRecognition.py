@@ -14,9 +14,7 @@ last_notification_time = 0
 notification_interval = 300
 
 # Load the model and weights
-# net = cv2.dnn.readNet("yolov4.weights", "yolov4.cfg")
 net = cv2.dnn.readNet("yolov7-tiny.weights", "yolov7-tiny.cfg")
-# net = cv2.dnn.readNet("yolov7.weights", "yolov7.cfg")
 net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
 net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
 
@@ -28,10 +26,6 @@ with open("coco.names", "r") as f:
 # Define the confidence and NMS thresholds for object detection
 conf_threshold = 0.6
 nms_threshold = 0.4
-
-# Starten der Kamera
-# cap = cv2.VideoCapture(0)
-# cap = cv2.VideoCapture('Birds_12___4K_res.mp4')
 
 # Define the classes to detect
 # animal_classes = ["bird", "cat", "dog", "horse", "sheep", "cow", "bear", "person"]
@@ -105,18 +99,69 @@ def manual_control():
     # Publish the manual control direction to MQTT
     direction = request.form.get("direction")
     mqtt_client.publish("iot/dhbw/leopard3/manual_control", direction)
+    if t_target_tracking.is_alive():
+        event.set()
     return "OK"
+
+
+@app.route("/shoot_control", methods=["POST"])
+def shoot_control():
+    mqtt_client.publish("iot/dhbw/leopard3/manual_control", "shoot")
+    return "OK"
+
+
+@app.route("/stop_control", methods=["POST"])
+def stop_control():
+    if t_target_tracking.is_alive():
+        event.set()
+    return "OK"
+
+
+selected_object_id = None
+event = threading.Event()
 
 
 @app.route("/automatic_control", methods=["POST"])
 def automatic_control():
-    # Publish the selected object's coordinates for automatic control to MQTT
+    global selected_object_id
     object_index = int(request.form.get("object_index"))
+    event.clear()
     with output_frame_lock:
-        selected_object = detected_objects[object_index]
-    coordinates = json.dumps(selected_object["Position"])
-    mqtt_client.publish("iot/dhbw/leopard3/automatic_control", coordinates)
+        selected_object_id = detected_objects[object_index]['id']
+
+    if not t_target_tracking.is_alive():
+        t_target_tracking.start()
     return "OK"
+
+
+def target_tracking():
+    global selected_object_id, event
+    frame_width = 600
+    frame_height = 600
+    tolerance = 10
+    while not event.is_set():
+        with output_frame_lock:
+            # Get current coordinates
+            coordinate = [0, 0]
+            for item in detected_objects:
+                if item["id"] == selected_object_id:
+                    coordinate = item["Position"]
+        # Compute horizontal distance
+        distance_x = frame_width / 2 - coordinate[0]
+        distance_y = frame_height / 2 - coordinate[1]
+
+        if abs(distance_x) > tolerance or abs(distance_y) > tolerance:
+            if abs(distance_x) > abs(distance_y):
+                if distance_x > 0:
+                    mqtt_client.publish("iot/dhbw/leopard3/manual_control", "left")
+                else:
+                    mqtt_client.publish("iot/dhbw/leopard3/manual_control", "right")
+            else:
+                if distance_y > 0:
+                    mqtt_client.publish("iot/dhbw/leopard3/manual_control", "up")
+                else:
+                    mqtt_client.publish("iot/dhbw/leopard3/manual_control", "down")
+        # time.sleep(0.1)
 
 
 def generate():
@@ -128,22 +173,7 @@ def generate():
         with output_frame_lock:
             if outputFrame is None:
                 continue
-
             img, timestamp = outputFrame
-
-            # current_time = time.time()
-
-            # # Update the time difference display every second
-            # if current_time - last_display_time >= display_interval:
-            #     # Calculate the time difference
-            #     time_difference = current_time - timestamp
-            #
-            #     # Display the time difference on the frame
-            #     time_text = f"Time_lag {time_difference:.2f}s"
-            #     last_display_time = current_time
-            #
-            # cv2.putText(img, time_text, (img.shape[1] - 200, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
             # Encode the current frame as JPEG (saves bandwidth and is faster)
             (flag, encodedImage) = cv2.imencode(".jpg", img)
 
@@ -300,16 +330,19 @@ def object_detection():
 
 if __name__ == '__main__':
     mqtt_connect()
-
     # start a thread that will perform object detection
-    t = threading.Thread(target=object_detection)
-    t.daemon = True
-    t.start()
+    t_object_detection = threading.Thread(target=object_detection)
+    t_object_detection.daemon = True
+    t_object_detection.start()
 
     # start a thread that will receive frames from the client
-    t_receive = threading.Thread(target=receive_frames)
-    t_receive.daemon = True
-    t_receive.start()
+    t_receive_frames = threading.Thread(target=receive_frames)
+    t_receive_frames.daemon = True
+    t_receive_frames.start()
+
+    # create a thread that will be used to automatically track user selected objects
+    t_target_tracking = threading.Thread(target=target_tracking)
+    t_target_tracking.daemon = True
 
     # start the flask app
     app.run(host="0.0.0.0", port=8000, debug=True,

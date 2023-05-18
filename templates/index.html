@@ -66,6 +66,23 @@
     }).catch((error) => console.error(error));
   }
 
+  function sendShootSignal() {
+    fetch("/shoot_control", {
+        method: "POST",
+        body: new URLSearchParams({ action: "shoot" }),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    }).catch((error) => console.error(error));
+  }
+
+  function sendStopSignal() {
+    fetch("/stop_control", {
+        method: "POST",
+        body: new URLSearchParams({ action: "stop" }),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    }).catch((error) => console.error(error));
+  }
+
+
     // Add event listeners for the direction buttons
     document.getElementById("up-button").addEventListener("click", () => sendManualControl("up"));
     document.getElementById("down-button").addEventListener("click", () => sendManualControl("down"));
@@ -74,6 +91,12 @@
 
     // Add event listener for the dropdown list
     document.getElementById("detected-objects").addEventListener("change", onObjectSelected);
+
+    // Add event listener for the Shoot and STOP Button
+    document.getElementById("shoot-button").addEventListener("click", sendShootSignal);
+    document.getElementById("stop-button").addEventListener("click", sendStopSignal);
+
+
 
     setInterval(updateDetectedObjects, 1000); // Update the detected objects every second
   </script>
