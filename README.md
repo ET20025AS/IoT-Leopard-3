@@ -1,6 +1,6 @@
-# Object-Detection-Birds:
+# Object-Tracking:
 
-Trained Model from: yolov4.cfg, yolov4.weights
-https://github.com/AlexeyAB/darknet/releases/tag/darknet_yolo_v3_optimal
+Trained Model from: yolov7-tiny.cfg, yolov7-tiny.weights
+https://github.com/AlexeyAB/darknet/releases
 
 Refer to "requirements.txt" for more information of dependencies
